@@ -3,6 +3,7 @@ from urllib.request import Request, urlopen
 import urllib.parse
 from urllib.error import HTTPError 
 from bs4 import BeautifulSoup
+from lxml import html
 # json # 
 import json
 # errors #
@@ -116,8 +117,9 @@ class scraper_class:
             print(url)
             req = Request(url,headers={'User-Agent': 'Mozilla/5.0'})
             webpage = urlopen(req).read()
+            tree = html.fromstring(webpage)
             soup = BeautifulSoup(webpage, features="lxml")
-            return(('Success',soup,url))
+            return(('Success',soup,tree,url))
         except HTTPError as e:
             print('Patent: {0}, Error Status Code : {1}'.format(patent,e.code))
             return(e.code,'',url)
@@ -154,12 +156,11 @@ class scraper_class:
                 'priority_date':priority_date,
                 'pub_date':pub_date})
 
-    def process_patent_html(self,soup):
+    def process_patent_html(self,soup, tree):
         """ Parse patent html using BeautifulSoup module
 
 
         Returns (variables returned in dictionary, following are key names): 
-            - title                     (str)   : title
             - application_number        (str)   : application number
             - inventor_name             (json)  : inventors of patent 
             - assignee_name_orig        (json)  : original assignees to patent
@@ -178,14 +179,6 @@ class scraper_class:
             
 
         """
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
-        #  Get title 
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
-        title_text=''
-        # Get title # 
-        title = soup.find('meta',attrs={'name':'DC.title'})
-        title_text=title['content'].rstrip()
-
         try:
             inventor_name = [{'inventor_name':x.get_text()} for x in soup.find_all('dd',itemprop='inventor')]
         except:
@@ -282,8 +275,7 @@ class scraper_class:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
         #  Return data as a dictionary
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
-        return({'title': title_text,
-                'inventor_name':json.dumps(inventor_name),
+        return({'inventor_name':json.dumps(inventor_name),
                 'assignee_name_orig':json.dumps(assignee_name_orig),
                 'assignee_name_current':json.dumps(assignee_name_current),
                 'pub_date':pub_date,
@@ -296,9 +288,9 @@ class scraper_class:
                 'backward_cite_yes_family':json.dumps(backward_cites_yes_family),
                 'abstract_text':abstract_text})
 
-    def get_scraped_data(self,soup,patent,url):
+    def get_scraped_data(self,soup, tree, patent,url):
         # ~~ Parse individual patent ~~ #
-        parsing_individ_patent = self.process_patent_html(soup)
+        parsing_individ_patent = self.process_patent_html(soup, tree, patent)
         # ~~ Add url + patent to dictionary ~~ #
         parsing_individ_patent['url'] = url
         parsing_individ_patent['patent'] = patent
@@ -320,11 +312,11 @@ class scraper_class:
         # ~ Loop through list of patents and scrape them ~ #
         else:
             for patent in self.list_of_patents:
-                error_status, soup, url = self.request_single_patent(patent)
+                error_status, soup, tree, url = self.request_single_patent(patent)
                 # ~ Add scrape status variable ~ #
                 self.add_scrape_status(patent,error_status)
                 if error_status=='Success':
-                    self.parsed_patents[patent] = self.get_scraped_data(soup,patent,url)
+                    self.parsed_patents[patent] = self.get_scraped_data(soup,tree,patent,url)
                 else:
                     self.parsed_patents[patent] = {}
 
